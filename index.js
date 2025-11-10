@@ -3,12 +3,62 @@ const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 require('dotenv').config() ;
 const app = express();
+const admin = require("firebase-admin");
 const port = process.env.PORT || 5205 ;
+
+const serviceAccount = require("./home-nest-firebase-admin-key.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 
 //middleware
 app.use(cors());
 app.use(express.json());
+
+
+
+
+const logger = (req, res, next) => {
+    console.log('logging info')
+    next()
+}
+
+
+const verifyFirebaseToken = async (req, res, next) => {
+
+    // console.log('in the verify middleware', req.headers.authorization)
+
+    if(!req.headers.authorization) {
+        //do not allow to go
+        return res.status(401).send({message: 'unauthorized access'})
+    }
+
+    const token = req.headers.authorization.split(' ')[1]
+
+    if(!token) {
+        return res.status(401).send({message: 'unauthorized access' })
+    }
+
+    // verify token
+
+    try{
+       const userInfo = await  admin.auth().verifyIdToken(token) ;
+       req.token_email = userInfo.email
+    //    console.log('after token verification', userInfo)
+         next()
+    }
+    catch{
+        console.log('invalid token')
+         return res.status(401).send({message: 'unauthorized access' })
+    }
+
+   
+}
+
+
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.vm94rma.mongodb.net/?appName=Cluster0`;
 
@@ -62,7 +112,7 @@ async function run() {
     }) 
 
 
-    app.get('/properties', async (req, res) => {   
+    app.get('/properties', logger, verifyFirebaseToken, async (req, res) => {   
           const cursor = propertiesCollection.find().sort({created_at: -1})
           const result = await cursor.toArray() ;
           res.send(result) ;
