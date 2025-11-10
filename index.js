@@ -33,7 +33,40 @@ async function run() {
 
     const db = client.db('home_db')
     const propertiesCollection = db.collection("properties")
+    const usersCollection = db.collection("users")
 
+
+     app.get('/users', async (req, res) => {
+          const email = req.query.email ;
+            const query = {} ;
+            if(email){
+              query.email  = email
+            }
+            const cursor = usersCollection.find(query)
+            const result = await cursor.toArray() ;
+            res.send(result) ;
+    })
+
+    app.post('/users', async (req, res) => {
+        const newUser = req.body ;
+        const email = req.body.email ;
+        const query = { email: email } ;
+        const existingUser = await usersCollection.findOne(query) ;
+        if(existingUser){
+            return res.send({message: 'User already exists'}) ;
+        } else {
+        const result = await usersCollection.insertOne(newUser) ;
+        res.send(result) ;
+        }
+       
+    }) 
+
+
+    app.get('/properties', async (req, res) => {   
+          const cursor = propertiesCollection.find().sort({created_at: -1})
+          const result = await cursor.toArray() ;
+          res.send(result) ;
+    }) ;
 
     app.post('/properties', async (req, res) => {
         const newProperty = req.body ;
