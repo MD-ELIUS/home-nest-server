@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config() ;
 const app = express();
 const admin = require("firebase-admin");
@@ -84,6 +84,7 @@ async function run() {
     const db = client.db('home_db')
     const propertiesCollection = db.collection("properties")
     const usersCollection = db.collection("users")
+    const reviewsCollection = db.collection("reviews")
 
 
      app.get('/users', async (req, res) => {
@@ -112,17 +113,114 @@ async function run() {
     }) 
 
 
-    app.get('/properties', logger, verifyFirebaseToken, async (req, res) => {   
-          const cursor = propertiesCollection.find().sort({created_at: -1})
-          const result = await cursor.toArray() ;
-          res.send(result) ;
-    }) ;
+   app.get("/properties", logger, async (req, res) => {
+  try {
+    const email = req.query.userEmail; // get email from query
+    const sort = req.query.sort || "dateDesc";
+
+    // Build query object
+    const query = {};
+    if (email) query.userEmail = email; // filter by email if provided
+
+    // Define sort stage dynamically for aggregate
+    let sortStage = {};
+    if (sort === "dateAsc") sortStage = { createdAtDate: 1 };
+    else if (sort === "dateDesc") sortStage = { createdAtDate: -1 };
+    else if (sort === "priceHigh") sortStage = { priceNumber: -1 };
+    else if (sort === "priceLow") sortStage = { priceNumber: 1 };
+
+    // Use MongoDB aggregation to safely convert data types before sorting
+    const result = await propertiesCollection
+      .aggregate([
+        { $match: query },
+        {
+          $addFields: {
+            // Convert string to proper data type if needed
+            priceNumber: { $toDouble: "$price" },
+            createdAtDate: { $toDate: "$created_at" },
+          },
+        },
+        { $sort: sortStage },
+      ])
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    console.error("❌ Error fetching properties:", error);
+    res.status(500).send({ message: "Failed to fetch properties." });
+  }
+});
+
+
+
+
+app.get('/latest-properties', async (req, res) => {
+        const cursor = propertiesCollection.find().sort({created_at: -1}).limit(6) ;
+        const result = await cursor.toArray() ;
+        res.send(result)
+    })
+
+
+       app.get('/properties/:id', logger, verifyFirebaseToken, async (req, res) => {
+  const id = req.params.id;
+  const email = req.query.email; // ✅ optional, only check if provided
+  const query = { _id: new ObjectId(id) };
+
+  if (email) {
+    // ✅ Only allow if the token email matches the query email
+    if (email !== req.token_email) {
+      return res.status(403).send({ message: 'forbidden access' });
+    }
+    query.email = email;
+  }
+    const result = await propertiesCollection.findOne(query);
+    res.send(result);
+  
+});
+
 
     app.post('/properties', async (req, res) => {
         const newProperty = req.body ;
         const result = await propertiesCollection.insertOne(newProperty) ;
         res.send(result)
     })
+
+      app.patch('/properties/:id', async (req, res) => {
+    const id = req.params.id;
+    const updatedProduct = req.body;
+    const query = { _id: new ObjectId(id) };
+    const update = { $set: updatedProduct };
+    const result = await propertiesCollection.updateOne(query, update);
+    res.send(result);
+});
+
+
+
+    app.delete('/properties/:id', async (req, res) => {
+        const id = req.params.id ;
+        const query = {_id: new ObjectId(id) } 
+        const result = await propertiesCollection.deleteOne(query) ;
+        res.send(result)
+    })
+
+
+
+     app.get('/reviews', verifyFirebaseToken, async (req, res) => {
+
+    const email = req.query.email; // ✅ get email from query string
+    const query = {};
+
+    if (email) {
+        if(email !== req.token_email) {
+         return res.status(403).send({message: 'forbidden access'})
+        }
+        query.buyer_email = email; // ✅ filter by buyer_email
+    }
+
+    const cursor = reviewsCollection.find(query);
+    const result = await cursor.toArray();
+    res.send(result);
+});
 
 
     // Send a ping to confirm a successful connection
