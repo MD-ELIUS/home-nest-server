@@ -179,13 +179,13 @@ app.get('/latest-properties', async (req, res) => {
 });
 
 
-    app.post('/properties', async (req, res) => {
+    app.post('/properties', verifyFirebaseToken, async (req, res) => {
         const newProperty = req.body ;
         const result = await propertiesCollection.insertOne(newProperty) ;
         res.send(result)
     })
 
-      app.patch('/properties/:id', async (req, res) => {
+      app.patch('/properties/:id', verifyFirebaseToken, async (req, res) => {
     const id = req.params.id;
     const updatedProduct = req.body;
     const query = { _id: new ObjectId(id) };
@@ -196,7 +196,7 @@ app.get('/latest-properties', async (req, res) => {
 
 
 
-    app.delete('/properties/:id', async (req, res) => {
+    app.delete('/properties/:id', verifyFirebaseToken, async (req, res) => {
         const id = req.params.id ;
         const query = {_id: new ObjectId(id) } 
         const result = await propertiesCollection.deleteOne(query) ;
@@ -205,21 +205,38 @@ app.get('/latest-properties', async (req, res) => {
 
 
 
-     app.get('/reviews', verifyFirebaseToken, async (req, res) => {
+ app.get('/reviews', verifyFirebaseToken, async (req, res) => {
+  const email = req.query.email;          // optional, filter by reviewer
+  const propertyId = req.query.propertyId; // optional, filter by property
+  const query = {};
 
-    const email = req.query.email; // ✅ get email from query string
-    const query = {};
-
-    if (email) {
-        if(email !== req.token_email) {
-         return res.status(403).send({message: 'forbidden access'})
-        }
-        query.buyer_email = email; // ✅ filter by buyer_email
+  // Filter by reviewer email if provided
+  if (email) {
+    if (email !== req.token_email) {
+      return res.status(403).send({ message: 'forbidden access' });
     }
+    query.reviewerEmail = email;
+  }
 
-    const cursor = reviewsCollection.find(query);
-    const result = await cursor.toArray();
-    res.send(result);
+  // Filter by property ID if provided
+  if (propertyId) {
+    query.propertyId = propertyId;
+  }
+
+  const cursor = reviewsCollection.find(query);
+  const result = await cursor.toArray();
+  res.send(result);
+});
+
+app.post('/reviews', verifyFirebaseToken, async (req, res) => {
+  try {
+    const newReview = req.body;
+    const result = await reviewsCollection.insertOne(newReview);
+    res.status(201).send(result);
+  } catch (error) {
+    console.error("Error adding review:", error);
+    res.status(500).send({ message: "Failed to add review" });
+  }
 });
 
 
