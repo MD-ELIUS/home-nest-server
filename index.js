@@ -115,27 +115,26 @@ async function run() {
 
    app.get("/properties", logger, async (req, res) => {
   try {
-    const email = req.query.userEmail; // get email from query
+    const email = req.query.userEmail; 
     const sort = req.query.sort || "dateDesc";
 
-    // Build query object
+  
     const query = {};
-    if (email) query.userEmail = email; // filter by email if provided
+    if (email) query.userEmail = email; 
 
-    // Define sort stage dynamically for aggregate
+   
     let sortStage = {};
     if (sort === "dateAsc") sortStage = { createdAtDate: 1 };
     else if (sort === "dateDesc") sortStage = { createdAtDate: -1 };
     else if (sort === "priceHigh") sortStage = { priceNumber: -1 };
     else if (sort === "priceLow") sortStage = { priceNumber: 1 };
 
-    // Use MongoDB aggregation to safely convert data types before sorting
     const result = await propertiesCollection
       .aggregate([
         { $match: query },
         {
           $addFields: {
-            // Convert string to proper data type if needed
+           
             priceNumber: { $toDouble: "$price" },
             createdAtDate: { $toDate: "$created_at" },
           },
@@ -163,11 +162,11 @@ app.get('/latest-properties', async (req, res) => {
 
        app.get('/properties/:id', logger, verifyFirebaseToken, async (req, res) => {
   const id = req.params.id;
-  const email = req.query.email; // ✅ optional, only check if provided
+  const email = req.query.email; 
   const query = { _id: new ObjectId(id) };
 
   if (email) {
-    // ✅ Only allow if the token email matches the query email
+    
     if (email !== req.token_email) {
       return res.status(403).send({ message: 'forbidden access' });
     }
@@ -206,11 +205,11 @@ app.get('/latest-properties', async (req, res) => {
 
 
  app.get('/reviews', verifyFirebaseToken, async (req, res) => {
-  const email = req.query.email;          // optional, filter by reviewer
-  const propertyId = req.query.propertyId; // optional, filter by property
+  const email = req.query.email;          
+  const propertyId = req.query.propertyId; 
   const query = {};
 
-  // Filter by reviewer email if provided
+  
   if (email) {
     if (email !== req.token_email) {
       return res.status(403).send({ message: 'forbidden access' });
@@ -218,7 +217,7 @@ app.get('/latest-properties', async (req, res) => {
     query.reviewerEmail = email;
   }
 
-  // Filter by property ID if provided
+
   if (propertyId) {
     query.propertyId = propertyId;
   }
@@ -240,11 +239,60 @@ app.post('/reviews', verifyFirebaseToken, async (req, res) => {
 });
 
 
-    // Send a ping to confirm a successful connection
+app.delete('/reviews', verifyFirebaseToken, async (req, res) => {
+  const propertyId = req.query.propertyId;
+  const email = req.query.email;
+
+  if (!propertyId) {
+    return res.status(400).send({ message: 'propertyId is required' });
+  }
+
+
+  if (email && email !== req.token_email) {
+    return res.status(403).send({ message: 'forbidden access' });
+  }
+
+  try {
+    const result = await reviewsCollection.deleteMany({ propertyId });
+    res.send({ deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("Error deleting reviews:", error);
+    res.status(500).send({ message: 'Failed to delete reviews' });
+  }
+});
+
+
+app.delete('/reviews/:id', verifyFirebaseToken, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const query = { _id: new ObjectId(id) };
+    const review = await reviewsCollection.findOne(query);
+
+    if (!review) {
+      return res.status(404).send({ success: false, message: 'Review not found' });
+    }
+
+   
+    if (req.token_email !== review.reviewerEmail) {
+      return res.status(403).send({ success: false, message: 'forbidden access' });
+    }
+
+    const result = await reviewsCollection.deleteOne(query);
+    res.send({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("Error deleting review:", error);
+    res.status(500).send({ success: false, message: 'Failed to delete review' });
+  }
+});
+
+
+
+   
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
-    // Ensures that the client will close when you finish/error
+    
    
   }
 }
